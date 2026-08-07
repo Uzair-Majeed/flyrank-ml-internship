@@ -34,5 +34,6 @@ __pycache__/
 .venv/
 venv/
 .env
+venv
 
 !work/outputs/*

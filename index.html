@@ -1,0 +1,333 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>Ranking Content Decay: A Precision-at-K Approach to Editorial Refresh Prioritization</title>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link href="https://fonts.googleapis.com/css2?family=Fraunces:opsz,wght@9..144,400;9..144,500;9..144,600&family=IBM+Plex+Sans:wght@400;500;600&family=IBM+Plex+Mono:wght@400;500&display=swap" rel="stylesheet">
+<style>
+:root{
+  --paper:#FAFAF6;
+  --ink:#1C2024;
+  --slate:#5B6472;
+  --hairline:#E4E1D8;
+  --signal:#B8862E;
+  --decay:#A8462E;
+  --signal-tint:#F3E7D3;
+  --decay-tint:#F3E0D8;
+}
+*{box-sizing:border-box; margin:0; padding:0;}
+html{scroll-behavior:smooth;}
+body{
+  background:var(--paper);
+  color:var(--ink);
+  font-family:'IBM Plex Sans', sans-serif;
+  font-size:16px;
+  line-height:1.65;
+}
+::selection{background:var(--signal-tint);}
+a{color:var(--signal); text-decoration:none; border-bottom:1px solid currentColor;}
+a:hover{opacity:.75;}
+
+.layout{display:grid; grid-template-columns:260px 1fr; max-width:1180px; margin:0 auto;}
+@media (max-width:900px){.layout{grid-template-columns:1fr;}}
+
+/* ---- Sidebar / TOC ---- */
+nav.toc{
+  position:sticky; top:0; align-self:start; height:100vh; overflow-y:auto;
+  padding:48px 28px; border-right:1px solid var(--hairline);
+}
+@media (max-width:900px){nav.toc{position:relative; height:auto; border-right:none; border-bottom:1px solid var(--hairline);}}
+.toc-brand{font-family:'Fraunces',serif; font-size:15px; font-weight:600; letter-spacing:.02em; margin-bottom:4px;}
+.toc-meta{font-family:'IBM Plex Mono', monospace; font-size:11px; color:var(--slate); margin-bottom:36px;}
+.toc a{
+  display:block; font-size:13px; color:var(--slate); border-bottom:none;
+  padding:7px 0; border-left:2px solid transparent; padding-left:12px; margin-left:-14px;
+  transition:color .15s, border-color .15s;
+}
+.toc a:hover, .toc a.active{color:var(--ink); border-left-color:var(--signal);}
+.toc-num{font-family:'IBM Plex Mono', monospace; color:var(--slate); margin-right:8px; font-size:11px;}
+
+/* ---- Main content ---- */
+main{padding:64px 56px 120px; max-width:760px;}
+@media (max-width:900px){main{padding:40px 24px 80px;}}
+
+.kicker{
+  font-family:'IBM Plex Mono', monospace; font-size:12px; letter-spacing:.08em; text-transform:uppercase;
+  color:var(--signal); margin-bottom:18px;
+}
+h1.title{
+  font-family:'Fraunces',serif; font-weight:600; font-size:2.6rem; line-height:1.12; letter-spacing:-.01em;
+  margin-bottom:22px;
+}
+.byline{color:var(--slate); font-size:14px; margin-bottom:44px;}
+.byline strong{color:var(--ink);}
+
+.abstract{
+  background:var(--signal-tint); border:1px solid var(--hairline); border-radius:2px;
+  padding:26px 28px; margin-bottom:56px; font-size:14.5px;
+}
+.abstract-label{font-family:'IBM Plex Mono', monospace; font-size:11px; letter-spacing:.08em; text-transform:uppercase; color:var(--signal); margin-bottom:10px;}
+
+section{margin-bottom:64px; scroll-margin-top:24px;}
+.section-eyebrow{
+  display:flex; align-items:baseline; gap:14px; margin-bottom:20px;
+}
+.section-num{font-family:'IBM Plex Mono', monospace; color:var(--signal); font-size:13px;}
+h2{font-family:'Fraunces',serif; font-weight:600; font-size:1.5rem; letter-spacing:-.005em;}
+h3{font-family:'Fraunces',serif; font-weight:500; font-size:1.1rem; margin:28px 0 12px;}
+p{margin-bottom:16px; color:#2A2E33;}
+p.lede{font-size:1.05rem; color:var(--ink);}
+ul, ol{margin:0 0 16px 22px;}
+li{margin-bottom:6px; color:#2A2E33;}
+code, .mono{font-family:'IBM Plex Mono', monospace; font-size:.9em; background:#F0EEE6; padding:1px 5px; border-radius:2px;}
+
+hr.rule{border:none; border-top:1px solid var(--hairline); margin:40px 0;}
+
+/* ---- data table ---- */
+table{width:100%; border-collapse:collapse; margin:20px 0 8px; font-size:14px;}
+th, td{padding:10px 12px; text-align:left; border-bottom:1px solid var(--hairline);}
+th{font-family:'IBM Plex Mono', monospace; font-size:11px; letter-spacing:.04em; text-transform:uppercase; color:var(--slate); font-weight:500;}
+tr.hero-row td{font-weight:600; color:var(--ink); background:var(--signal-tint);}
+td.num{font-family:'IBM Plex Mono', monospace;}
+
+.caption{font-size:12.5px; color:var(--slate); margin-top:8px; font-style:italic;}
+
+/* ---- Rank ladder (signature element) ---- */
+.ladder{margin:28px 0 8px;}
+.rank-row{display:grid; grid-template-columns:38px 150px 1fr 60px; align-items:center; gap:14px; padding:9px 0; border-bottom:1px solid var(--hairline);}
+.rank-badge{
+  width:30px; height:30px; border-radius:50%; display:flex; align-items:center; justify-content:center;
+  font-family:'IBM Plex Mono', monospace; font-size:12px; font-weight:600; color:#fff;
+}
+.rank-name{font-size:13.5px; font-weight:500;}
+.rank-bar-track{background:#EFEDE5; border-radius:2px; height:10px; overflow:hidden;}
+.rank-bar-fill{height:100%; border-radius:2px;}
+.rank-val{font-family:'IBM Plex Mono', monospace; font-size:13px; text-align:right;}
+
+/* ---- callout boxes ---- */
+.callout{border-left:3px solid var(--decay); background:var(--decay-tint); padding:16px 20px; margin:20px 0; font-size:14px; border-radius:0 2px 2px 0;}
+.callout-label{font-family:'IBM Plex Mono', monospace; font-size:11px; text-transform:uppercase; letter-spacing:.06em; color:var(--decay); margin-bottom:6px;}
+.callout.good{border-left-color:var(--signal); background:var(--signal-tint);}
+.callout.good .callout-label{color:var(--signal);}
+
+.reason-code{display:inline-block; font-family:'IBM Plex Mono', monospace; font-size:12px; background:var(--ink); color:var(--paper); padding:3px 8px; border-radius:2px; margin:2px 4px 2px 0;}
+
+figure{margin:24px 0;}
+figure img{width:100%; border:1px solid var(--hairline); border-radius:2px;}
+
+footer.credit{
+  border-top:1px solid var(--hairline); padding-top:28px; margin-top:20px; font-size:13.5px; color:var(--slate);
+}
+footer.credit .flyrank{font-weight:600; color:var(--ink);}
+
+.pill-row{display:flex; gap:8px; flex-wrap:wrap; margin:16px 0;}
+.pill{font-family:'IBM Plex Mono', monospace; font-size:11.5px; background:#F0EEE6; border:1px solid var(--hairline); padding:5px 10px; border-radius:20px; color:var(--slate);}
+</style>
+</head>
+<body>
+<div class="layout">
+
+<nav class="toc">
+  <div class="toc-brand">Ranking Content Decay</div>
+  <div class="toc-meta">FlyRank ML Internship &middot; Capstone</div>
+  <a href="#abstract"><span class="toc-num">00</span>Abstract</a>
+  <a href="#intro"><span class="toc-num">01</span>Introduction</a>
+  <a href="#data"><span class="toc-num">02</span>Data</a>
+  <a href="#method"><span class="toc-num">03</span>Methodology</a>
+  <a href="#results"><span class="toc-num">04</span>Results</a>
+  <a href="#limits"><span class="toc-num">05</span>Limitations</a>
+  <a href="#recs"><span class="toc-num">06</span>Recommendations</a>
+  <a href="#repro"><span class="toc-num">07</span>Reproducibility</a>
+  <a href="#credit"><span class="toc-num">08</span>Acknowledgments</a>
+</nav>
+
+<main>
+  <div class="kicker">Machine Learning &middot; Search &amp; Content Operations</div>
+  <h1 class="title">Ranking Content Decay: A Precision-at-K Approach to Editorial Refresh Prioritization</h1>
+  <div class="byline"><strong>Uzair</strong> &middot; ML Intern, FlyRank AI &middot; Week 8 Capstone</div>
+
+  <div class="abstract" id="abstract">
+    <div class="abstract-label">Abstract</div>
+    <p style="margin-bottom:0">Content editors can't manually audit thousands of pages a week to decide what needs a refresh, so most teams rely on brittle age-and-CTR rules or gut feel. This project asks whether a supervised model can rank pages by refresh urgency better than a rule-based baseline, using only signals editors could actually know at decision time &mdash; impressions, clicks, CTR, and position from 90-day search performance. A Random Forest classifier was trained on 30,000 content assets across 32 clients, validated with a client-grouped split to prevent one client's pages from leaking between train and test. Against the same held-out set, the model reached 70% precision in its top 20 picks and 68% in its top 50, versus 20% and 34% for the rule baseline and 24.5% for random selection &mdash; roughly a 2.9&times; gain in how many flagged pages actually needed attention. The result is a decision-support ranking, not proof that refreshing a page recovers its traffic; that causal claim is explicitly out of scope.</p>
+  </div>
+
+  <section id="intro">
+    <div class="section-eyebrow"><span class="section-num">01</span><h2>Introduction</h2></div>
+    <p class="lede">Search visibility decays quietly. A page can hold its position for months, then lose clicks for reasons that never show up in a simple dashboard &mdash; a title that stopped matching intent, a competitor that shipped a better answer, a scroll-depth drop that signals the content stopped landing.</p>
+    <p>Auditing that decay by hand doesn't scale. A content team with a fixed weekly capacity &mdash; five, ten, maybe twenty refreshes &mdash; needs to know which pages to open first, and a wrong call is expensive in both directions: refreshing a healthy page wastes a writer's hours, and missing a decaying one lets a competitor take the traffic before anyone notices.</p>
+    <p>This project frames that as a ranking problem: given everything knowable about a page at decision time, score it for refresh urgency, and hand editors a ranked queue instead of a spreadsheet. The specific question:</p>
+    <div class="callout good">
+      <div class="callout-label">Research question</div>
+      Can a model trained on observable 90-day search performance rank pages by refresh need more precisely, in the top of the queue, than a straightforward age-and-CTR rule &mdash; on a split that can't leak client-specific patterns?
+    </div>
+    <p>The unit of analysis is one content asset (<code>content_id</code>) aggregated over its trailing performance window. The decision it supports: which pages a content editor opens first this week, and under what reason code.</p>
+  </section>
+
+  <section id="data">
+    <div class="section-eyebrow"><span class="section-num">02</span><h2>Data</h2></div>
+    <p>The working sample is <strong>30,000 unique content assets across 32 clients</strong>, filtered from a full mid-panel release of <strong>331,437 unique content items</strong> and 9.8M daily performance rows spanning a single calendar month (2026-03), sourced from <code>fact_content_daily_performance</code>. Filtering kept only pages with non-zero 90-day impressions and at least 90 days of content age, so the sample reflects established pages with a real performance history rather than newly published content still in its ramp-up period.</p>
+    <h3>Fields used</h3>
+    <p>Five features, chosen because an editor could know each one at decision time without hindsight:</p>
+    <div class="pill-row">
+      <span class="pill">impressions_90d</span>
+      <span class="pill">clicks_90d</span>
+      <span class="pill">ctr_decimal</span>
+      <span class="pill">avg_position_clean</span>
+      <span class="pill">sessions_90d</span>
+    </div>
+    <p>The label, <code>target_needs_refresh</code>, is a constructed proxy &mdash; not a hand-labeled ground truth. It flags pages combining high established search demand with a measured downward trend, since no team hand-tags "this page needs a refresh" at scale. That makes it a reasonable stand-in for decay, not decay itself.</p>
+    <h3>Excluded, and why</h3>
+    <ul>
+      <li><strong>Trend/decay source columns</strong> (<code>trend_direction</code>, <code>trend_pct</code>) &mdash; these define the label, so keeping them as features would be target leakage.</li>
+      <li><strong>Client and content identifiers</strong> &mdash; used only for grouping the train/test split, never as predictive features, and never surfaced publicly.</li>
+      <li><strong>Long-tail queries below Search Console's privacy threshold</strong> &mdash; Google redacts these, so low-volume signal is systematically under-reported and can't be recovered.</li>
+    </ul>
+    <p>No client names, URLs, or query text appear anywhere in this paper or its underlying notebooks &mdash; every identifier is a hashed <code>content_id</code> / <code>client_id</code>.</p>
+  </section>
+
+  <section id="method">
+    <div class="section-eyebrow"><span class="section-num">03</span><h2>Methodology</h2></div>
+    <h3>Baseline</h3>
+    <p>The baseline is a transparent rule an editor could apply today: flag pages older than 180 days with under 2% CTR despite meaningful search views. It outputs one of four reason codes &mdash; <span class="reason-code">STALE_LOW_CTR</span> <span class="reason-code">STALE_CONTENT</span> <span class="reason-code">MONITOR</span> <span class="reason-code">HEALTHY</span> &mdash; so its picks stay auditable.</p>
+    <h3>Models</h3>
+    <p>Logistic Regression and a Random Forest classifier were compared against the rule. Logistic Regression first, as a sanity check &mdash; its coefficients are readable enough to catch a model leaning on a spurious signal before trusting anything more complex. Random Forest followed to capture the non-linear interactions a linear model and a hand-written rule both miss, like a page with stable impressions but quietly dropping scroll depth.</p>
+    <h3>Validation design</h3>
+    <p>Pages from the same client share domain authority, technical SEO setup, and baseline traffic levels. A standard row-level random split lets one client's pages sit in both train and test, so the model partly memorizes client identity rather than learning transferable decay patterns &mdash; and the reported score becomes optimistic. The fix: <code>GroupShuffleSplit</code> grouped by <code>client_id</code> (80/20, <code>random_state=42</code>), so every client's pages fall entirely on one side of the split. Train: 23,837 rows (35.5% positive rate). Test: 6,163 rows (24.5% positive rate).</p>
+    <h3>Leakage checks</h3>
+    <p>Three checks were run against the honest split: confirming the trend-source columns never entered the feature matrix; auditing correlation between each feature and the label for anything suspiciously high; and running permutation importance to confirm no single feature dominated the model's decisions.</p>
+    <div class="callout">
+      <div class="callout-label">What the naive split would have hidden</div>
+      Evaluated under a naive row-level random split, the same Random Forest reported 95% precision in its top 20 &mdash; a leakage artifact from client identity crossing between train and test, not a real capability. The grouped split brought that down to the honest number reported in Results. This gap is the single most important methodological finding in this paper: <strong>the choice of split changed the headline metric by 25 points.</strong>
+    </div>
+  </section>
+
+  <section id="results">
+    <div class="section-eyebrow"><span class="section-num">04</span><h2>Results</h2></div>
+    <p>All four methods were scored on the identical held-out, client-grouped test set (24.5% base rate). Precision@K is the metric that matters operationally: it answers "of the top K pages this method hands an editor, how many actually needed attention?"</p>
+
+    <div class="ladder">
+      <div class="rank-row">
+        <div class="rank-badge" style="background:var(--slate)">4</div>
+        <div class="rank-name">Random selection</div>
+        <div class="rank-bar-track"><div class="rank-bar-fill" style="width:24.5%; background:var(--slate)"></div></div>
+        <div class="rank-val">24.5%</div>
+      </div>
+      <div class="rank-row">
+        <div class="rank-badge" style="background:#C48A55">3</div>
+        <div class="rank-name">Rule baseline</div>
+        <div class="rank-bar-track"><div class="rank-bar-fill" style="width:34%; background:#C48A55"></div></div>
+        <div class="rank-val">34.0%</div>
+      </div>
+      <div class="rank-row">
+        <div class="rank-badge" style="background:#A5762F">2</div>
+        <div class="rank-name">Logistic Regression</div>
+        <div class="rank-bar-track"><div class="rank-bar-fill" style="width:40%; background:#A5762F"></div></div>
+        <div class="rank-val">40.0%</div>
+      </div>
+      <div class="rank-row">
+        <div class="rank-badge" style="background:var(--signal)">1</div>
+        <div class="rank-name">Random Forest</div>
+        <div class="rank-bar-track"><div class="rank-bar-fill" style="width:70%; background:var(--signal)"></div></div>
+        <div class="rank-val">70.0%</div>
+      </div>
+    </div>
+    <p class="caption">Precision@20 by method, honest client-grouped test split. Higher is better &mdash; share of the top 20 ranked pages that actually needed a refresh.</p>
+
+    <table>
+      <thead><tr><th>Method</th><th>Precision@20</th><th>Precision@50</th><th>PR-AUC</th></tr></thead>
+      <tbody>
+        <tr><td>Random selection</td><td class="num">24.5%</td><td class="num">24.5%</td><td class="num">0.245</td></tr>
+        <tr><td>Rule baseline (age &gt; 180d, CTR &lt; 2%)</td><td class="num">20.0%</td><td class="num">34.0%</td><td class="num">0.242</td></tr>
+        <tr><td>Logistic Regression</td><td class="num">40.0%</td><td class="num">38.0%</td><td class="num">0.258</td></tr>
+        <tr class="hero-row"><td>Random Forest</td><td class="num">70.0%</td><td class="num">68.0%</td><td class="num">0.583</td></tr>
+      </tbody>
+    </table>
+    <p class="caption">All scores on the same held-out, client-grouped test set (n=6,163, 24.5% base rate).</p>
+
+    <div class="callout">
+      <div class="callout-label">An honest wrinkle</div>
+      The rule baseline is <em>worse than random</em> at K=20 (20.0% vs 24.5%) &mdash; its strict age-and-CTR cutoff filters out most of the test set, so its very top picks aren't necessarily its most confident ones. It recovers to 34% by K=50. This is reported rather than smoothed over: a simple rule can rank worse than chance at small K even when it beats chance on average.
+    </div>
+
+    <h3>Feature importance</h3>
+    <p>Permutation importance on the honest split put <code>impressions_90d</code> well ahead of every other feature (importance 0.224), with <code>ctr_decimal</code>, <code>sessions_90d</code>, and <code>clicks_90d</code> trailing an order of magnitude lower. No single feature crossed the 0.40 threshold treated as a leakage red flag, which is consistent with the explicit leakage audit passing.</p>
+
+    <h3>Where the model is wrong</h3>
+    <p><strong>False positives:</strong> older, high-impression pages the model flags as decaying that are actually stable &mdash; without a time-series trend feature (withheld to avoid leakage), the model reasonably but incorrectly treats "old and high-volume" as a decay signal on its own.</p>
+    <p><strong>False negatives:</strong> pages that are genuinely declining but have relatively low raw impression volume or an unexpectedly high CTR, which reads to the model as healthy.</p>
+  </section>
+
+  <section id="limits">
+    <div class="section-eyebrow"><span class="section-num">05</span><h2>Limitations &amp; Honest Framing</h2></div>
+    <ul>
+      <li><strong>Not causal.</strong> This ranks pages by observed decay signal. It does not show that refreshing a flagged page recovers its traffic &mdash; that would require a before/after intervention study this project doesn't run.</li>
+      <li><strong>Single 30-day window.</strong> The sample is drawn from one calendar month, so seasonal effects &mdash; a page that only looks stale outside its peak season &mdash; aren't visible to the model.</li>
+      <li><strong>Search-Console privacy thresholding.</strong> Long-tail, low-volume queries are redacted by Google before this data ever arrives, understating true demand for niche pages.</li>
+      <li><strong>Visibility-only signal.</strong> No on-page conversion or business-outcome data is included; "recovered clicks" is not the same as "recovered revenue."</li>
+      <li><strong>Proxy label, not ground truth.</strong> <code>target_needs_refresh</code> is a constructed rule over observed metrics, not an editor's hand-audited judgment call, so the model is learning to match a proxy rather than true editorial need.</li>
+    </ul>
+    <p>Everything in this paper should be read as <em>decision support</em>: a way to prioritize a review queue under limited editorial capacity, not an authority that overrides editorial judgment.</p>
+  </section>
+
+  <section id="recs">
+    <div class="section-eyebrow"><span class="section-num">06</span><h2>Ranked Recommendations</h2></div>
+    <p>Model output maps to four archetypes, each with a reason code an editor can act on directly rather than a bare probability:</p>
+    <table>
+      <thead><tr><th>Archetype</th><th>Reason code</th><th>Trigger</th><th>Action</th></tr></thead>
+      <tbody>
+        <tr><td>High-value decay</td><td><span class="reason-code">RC_FULL_REFRESH</span></td><td>High model score, high impression volume</td><td>Full content &amp; title refresh, top priority</td></tr>
+        <tr><td>Stale, low CTR</td><td><span class="reason-code">STALE_LOW_CTR</span></td><td>Aged content, weak click-through despite visibility</td><td>Rewrite title &amp; meta first</td></tr>
+        <tr><td>Stale content</td><td><span class="reason-code">STALE_CONTENT</span></td><td>Aged content, healthier CTR</td><td>Update facts &amp; sources, lighter touch</td></tr>
+        <tr><td>Monitor</td><td><span class="reason-code">MONITOR</span></td><td>Mid-range score, ambiguous signal</td><td>Watch next cycle, no action yet</td></tr>
+      </tbody>
+    </table>
+    <p>At fixed editorial capacity, prioritizing this ranked queue over an unordered review list yields roughly a <strong>2.9&times;</strong> efficiency gain &mdash; the share of reviewed pages that actually needed attention, versus reviewing in no particular order.</p>
+
+    <h3>Human sign-off, by design</h3>
+    <p>Of the 30,000-page queue, <strong>15,086 pages</strong> (just over half) are flagged for mandatory human review before any action &mdash; high-impression or high-priority pages where an automated call carries too much downside. The remaining <strong>14,914</strong> fall into standard monitoring.</p>
+    <div class="callout">
+      <div class="callout-label">Strict automation ban</div>
+      This system never automatically deletes or prunes content, and never auto-publishes AI-generated rewrites without human review. It ranks and recommends; a person decides.
+    </div>
+
+    <h3>Monitoring &amp; retrain triggers</h3>
+    <p>Scheduled retraining every 90 days on refreshed rolling performance data, plus an early trigger: if monthly manual audits show rolling Precision@20 drop below 50%, retraining is pulled forward rather than waiting for the quarterly cycle.</p>
+  </section>
+
+  <section id="repro">
+    <div class="section-eyebrow"><span class="section-num">07</span><h2>Reproducibility</h2></div>
+    <p>Every claim above traces back to a notebook in this repository, in order:</p>
+    <table>
+      <thead><tr><th>Notebook</th><th>Covers</th></tr></thead>
+      <tbody>
+        <tr><td><code>w01_research_question.ipynb</code></td><td>Lane selection, decision framing, cost of a wrong call</td></tr>
+        <tr><td><code>w02_ml_task_framing.ipynb</code></td><td>Task type, target proxy definition, unit of analysis</td></tr>
+        <tr><td><code>w03_data_contract.ipynb</code></td><td>Grain, fields, verification queries, data limits</td></tr>
+        <tr><td><code>w04_baseline_score.ipynb</code></td><td>Rule baseline, reason codes, top-20 review</td></tr>
+        <tr><td><code>w05_model.ipynb</code></td><td>Model selection, split design, results vs baseline</td></tr>
+        <tr><td><code>w06_validation_audit.ipynb</code></td><td>Naive-vs-honest split audit, leakage checks</td></tr>
+        <tr><td><code>w07_action_playbook.ipynb</code></td><td>Archetypes, human sign-off, retrain triggers, exports</td></tr>
+        <tr><td><code>capstone.ipynb</code></td><td>End-to-end summary mirroring this paper</td></tr>
+      </tbody>
+    </table>
+    <p>Exported artifacts: <code>work/outputs/ranked_action_queue.csv</code>, <code>work/outputs/baseline_action_score.csv</code>, <code>work/metrics/playbook_metrics.json</code>, <code>work/figures/action_archetype_distribution.png</code>.</p>
+  </section>
+
+  <footer class="credit" id="credit">
+    Built on the <span class="flyrank">FlyRank ML Internship dataset</span> &mdash; <a href="https://flyrank.ai" target="_blank" rel="noopener">flyrank.ai</a>.
+  </footer>
+</main>
+</div>
+
+<script>
+document.querySelectorAll('nav.toc a').forEach(link=>{
+  link.addEventListener('click',()=>{
+    document.querySelectorAll('nav.toc a').forEach(a=>a.classList.remove('active'));
+    link.classList.add('active');
+  });
+});
+</script>
+</body>
+</html>
