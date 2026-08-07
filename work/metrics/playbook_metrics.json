@@ -1,0 +1,14 @@
+{
+    "model_version": "w06_rf_honest_v1",
+    "evaluation_metrics": {
+        "test_base_rate": 0.245,
+        "precision_at_20": 0.7,
+        "precision_at_50": 0.68
+    },
+    "retrain_triggers": {
+        "precision_at_20_min_threshold": 0.5,
+        "max_data_age_days": 90,
+        "algo_update_wait_days": 14
+    },
+    "no_go_policy_enforced": true
+}
